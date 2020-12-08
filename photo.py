@@ -34,7 +34,6 @@ dest_other_path = destination_path.joinpath('processed','other')
 dest_sort_path = destination_path.joinpath('processed','sort')
 dest_crap_path.mkdir(parents=True, exist_ok=True)
 dest_other_path.mkdir(parents=True, exist_ok=True)
-dest_sort_path.mkdir(parents=True, exist_ok=True)
 
 # test if the file is an image
 def is_image(imagename):
@@ -74,21 +73,27 @@ def get_filename(imagename):
             # if no metadata keep the filename and send it to crap folder
             if dt == None or md == None:
                 logger.warning(f'no metadata found in image {name}')
-                logger.debug(f'set the filename as {name}')
+                # keep the original name plus the size of the file
                 filename = name.replace(suffix,f'_{size}{suffix}')
+                logger.debug(f'set the filename as {name}')
+                # copy to crap folder
                 shutil.copy(imagename, dest_crap_path.joinpath(filename))
                 logger.debug(f'send {filename} to {dest_crap_path}')
             # else change the filename with metadata
             else:
-                # add time and model to the name
+                # add time and model to the a new name
                 filename = f'{dt.replace(" ","").replace(":","")}_{md.replace(" ","")}_{size}{suffix}'
+                # check path exist, path with year
+                complete_path = dest_sort_path.joinpath(dt[0:4])
+                complete_path.mkdir(parents=True, exist_ok=True)
                 # test if file with new name already exists
-                if is_image(dest_sort_path.joinpath(filename)):
+                if complete_path.joinpath(filename).exists():
                     logger.warning(f'image with name {filename} already exists')
                     # test if it's a duplicate
-                    if same_images(imagename,dest_sort_path.joinpath(filename)):
+                    if same_images(imagename,complete_path.joinpath(filename)):
                         # if duplicate do nothing
                         logger.warning(f'image {name} is a duplicate')
+                        # set filename to none in order to exit loop later
                         filename=None
                         logger.warning(f'skip {name}')
                     else:
@@ -97,21 +102,23 @@ def get_filename(imagename):
                         filename = filename.replace(suffix,f'_{secrets.token_hex(2)}{suffix}')
                         logger.debug(f'change name from {name} to {filename}')
                 if filename:
-                    # check path exist, path with year
-                    complete_path = dest_sort_path.joinpath(dt[0:4], filename)
-                    complete_path.mkdir(parents=True, exist_ok=True)
-                    shutil.copy(imagename, complete_path)
+                    # copy the renamed image
+                    shutil.copy(imagename, complete_path.joinpath(filename))
                     logger.debug(f'change name from {name} to {filename}')
-                    logger.debug(f'send {filename} to {dest_sort_path}')
+                    logger.debug(f'send {filename} to {complete_path}')
             return True
     except IOError:
         logger.warning(f'file {imagename} is not an image')
+        # if not an image try to copy the file to garbage directory with a new name
         filename = name.replace(suffix,f'_{size}{suffix}')
         try:
+            # if not an image try to copy the file to garbage directory
             shutil.copy(imagename, dest_other_path.joinpath(filename))
             logger.debug(f'send {filename} to {dest_other_path}')
+            logger.warning(f'file {imagename} processed')
         except IOError:
             logger.debug(f'skip {imagename}')
+            logger.warning(f'file {imagename} not processed')
         return False
 
 def get_all_exif():
@@ -145,7 +152,6 @@ def main():
             logger.info('- - - -')
             i = i + 1
         else:
-            logger.warning(f'file {file} not processed')
             logger.info('- - - -')
             j = j + 1
 
